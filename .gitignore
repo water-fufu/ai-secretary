@@ -1,0 +1,22 @@
+# 密钥文件
+.env
+
+# 图片资源
+*.jpg
+*.png
+*.jpeg
+
+# 临时/备份
+.backup/
+*.tmp
+_avatar_b64.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/
+.idea/
+.claude/
