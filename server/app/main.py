@@ -5,8 +5,10 @@ FastAPI 应用入口
 - 配置 CORS、异常处理
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import init_db
@@ -84,6 +86,42 @@ app.add_middleware(
 
 # 挂载 API 路由
 app.include_router(api_router, prefix="/api/v1")
+
+
+# ===== 全局异常处理 =====
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    请求参数校验错误处理
+    对空消息、缺少必填字段等返回友好提示，而非默认的 422 长堆栈
+    """
+    errors = exc.errors()
+    # 提取第一个错误的字段和消息
+    if errors:
+        field = errors[0].get("loc", ["unknown"])[-1]
+        msg = errors[0].get("msg", "参数校验失败")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "code": "VALIDATION_ERROR",
+                "message": f"参数「{field}」{msg}",
+                "detail": errors,
+            },
+        )
+    return JSONResponse(
+        status_code=400,
+        content={"code": "VALIDATION_ERROR", "message": "请求参数无效"},
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """通用异常处理，避免 500 直接暴露堆栈"""
+    print(f"⚠ 未处理异常: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"code": "INTERNAL_ERROR", "message": "服务器内部错误，请稍后重试"},
+    )
 
 
 @app.get("/")
