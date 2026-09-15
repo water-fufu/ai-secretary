@@ -103,12 +103,12 @@ class VectorStoreManager:
             documents: 带 metadata 的 Document 列表，metadata 中必须包含 chunk_id
         """
         if not documents:
-            # 空索引
-            embeddings = get_embeddings()
-            self._vector_store = FAISS.from_texts(["天书库为空"], embeddings)
+            # 空文档：不创建索引，避免触发 embedding 模型下载
+            # 首次写入笔记时会自动创建索引
+            print("⚠ 无切片数据，跳过索引重建")
+            self._vector_store = None
             self._id_map = {}
             self._reverse_id_map = {}
-            self.save()
             return
 
         embeddings = get_embeddings()

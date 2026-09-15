@@ -1,4 +1,4 @@
-"""笔记 CRUD 接口（P3 实现基础 CRUD）"""
+"""笔记 CRUD 接口（P3 实现基础 CRUD，P4 接入切片+向量化）"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,11 @@ from app.schemas.note import (
     NoteCreateRequest,
     NoteUpdateRequest,
     NoteListResponse,
+)
+from app.services.note_service import (
+    create_note_with_chunks,
+    update_note_with_chunks,
+    delete_note_with_chunks,
 )
 
 router = APIRouter(prefix="/notes", tags=["笔记管理"])
@@ -58,7 +63,7 @@ async def get_note(note_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("", response_model=NoteResponse, status_code=201)
 async def create_note(request: NoteCreateRequest, db: AsyncSession = Depends(get_db)):
-    """创建笔记"""
+    """创建笔记（自动切片 + 向量化 + FAISS 索引更新）"""
     # 检查 folder + file_name 是否重复
     existing = await db.execute(
         select(Note).where(Note.folder == request.folder, Note.file_name == request.file_name)
@@ -66,18 +71,15 @@ async def create_note(request: NoteCreateRequest, db: AsyncSession = Depends(get
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="该文件夹下已存在同名笔记")
 
-    note = Note(
+    # 调用 service 层：创建笔记 + 切片 + 保存切片 + 更新向量索引
+    note, chunks = await create_note_with_chunks(
+        db=db,
         folder=request.folder,
         file_name=request.file_name,
-        title=request.title,
         content=request.content,
+        title=request.title,
         source=request.source,
     )
-    db.add(note)
-    await db.commit()
-    await db.refresh(note)
-
-    # TODO: P4 触发切片 + 向量化 + FAISS 索引更新
     return NoteResponse.model_validate(note)
 
 
@@ -87,32 +89,18 @@ async def update_note(
     request: NoteUpdateRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """更新笔记"""
-    note = await db.get(Note, note_id)
+    """更新笔记（内容变更时自动重新切片 + 更新索引）"""
+    update_data = request.model_dump(exclude_unset=True)
+    note = await update_note_with_chunks(db, note_id, update_data)
     if not note:
         raise HTTPException(status_code=404, detail="笔记不存在")
-
-    # 更新非空字段
-    update_data = request.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(note, key, value)
-
-    await db.commit()
-    await db.refresh(note)
-
-    # TODO: P4 触发重新切片 + 索引更新
     return NoteResponse.model_validate(note)
 
 
 @router.delete("/{note_id}", status_code=204)
 async def delete_note(note_id: int, db: AsyncSession = Depends(get_db)):
-    """删除笔记（级联删除切片）"""
-    note = await db.get(Note, note_id)
-    if not note:
+    """删除笔记（级联删除切片 + 更新向量索引）"""
+    success = await delete_note_with_chunks(db, note_id)
+    if not success:
         raise HTTPException(status_code=404, detail="笔记不存在")
-
-    await db.delete(note)
-    await db.commit()
-
-    # TODO: P4 从 FAISS 索引中删除对应切片
     return None
