@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-electron/
+release/
+out/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Electron
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Python (server)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+.eggs/
+
+# Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+*.zip
+test-minimal/
+
+# Logs
+logs/
+.pytest_cache/

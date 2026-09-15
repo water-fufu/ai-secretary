@@ -1,0 +1,60 @@
+# 本地开发用 Docker Compose
+# 启动 PostgreSQL + Redis + FastAPI 后端
+# CloudBase 部署时只需要 server/ 目录和 Dockerfile
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mishu-postgres
+    environment:
+      POSTGRES_USER: mishu
+      POSTGRES_PASSWORD: mishu123456
+      POSTGRES_DB: mishu
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mishu -d mishu"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mishu-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./server
+    container_name: mishu-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mishu:mishu123456@postgres:5432/mishu
+      REDIS_URL: redis://redis:6379/0
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEBUG: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - faiss_data:/app/data/faiss
+
+volumes:
+  postgres_data:
+  redis_data:
+  faiss_data:

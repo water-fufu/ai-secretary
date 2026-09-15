@@ -1,0 +1,27 @@
+# Web 框架
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# 数据库（PostgreSQL 异步驱动，CloudBase 默认数据库）
+sqlalchemy[asyncio]>=2.0.30
+asyncpg>=0.29.0
+aiosqlite>=0.20.0  # 本地开发用 SQLite 测试
+
+# Redis
+redis>=5.0.0
+
+# LLM / RAG
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-deepseek>=0.1.0
+faiss-cpu>=1.8.0
+fastembed>=0.3.0  # ONNX 运行时 embedding，不依赖 torch，镜像小构建快
+
+# 配置与工具
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-dotenv>=1.0.0
+
+# 日志
+loguru>=0.7.0

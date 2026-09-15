@@ -1,0 +1,25 @@
+# electron-builder 打包配置
+appId: com.mishu.desktop
+productName: 秘书
+publish: null  # 禁用自动更新发布，避免 git 仓库检测失败
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - resources/**/*
+extraResources:
+  - from: resources
+    to: resources
+win:
+  target: nsis
+  icon: resources/icon.ico
+  signAndEditExecutable: false  # 禁用代码签名，避免 winCodeSign 下载失败
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 秘书
+  uninstallDisplayName: 秘书
+  artifactName: 秘书-Setup-${version}.${ext}

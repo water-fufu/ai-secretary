@@ -1,0 +1,27 @@
+# 排除不需要打包进镜像的文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.git/
+.gitignore
+*.md
+!README.md
+logs/
+*.log
+test.db
+test.db-journal
+data/
+.env
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
