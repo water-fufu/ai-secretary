@@ -34,8 +34,12 @@ RUN pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple
 # 拷贝应用代码
 COPY . .
 
-# 创建 FAISS 索引持久化目录
+# 创建数据目录（SQLite + FAISS 索引）
 RUN mkdir -p /app/data/faiss
+
+# 预下载 fastembed 嵌入模型（构建时下载，避免运行时从 HuggingFace 拉取）
+# 模型缓存到 ~/.cache/fastembed，打包进镜像
+RUN python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='all-MiniLM-L6-v2').embed(['test']))" && echo "Embedding model downloaded"
 
 # 暴露端口（必须与 CloudBase 服务配置一致：8080）
 EXPOSE 8080
