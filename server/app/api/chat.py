@@ -18,7 +18,7 @@ router = APIRouter(prefix="/chat", tags=["聊天"])
 
 
 @router.post("")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
     通用聊天接口（SSE 流式输出）
     根据模式自动分发到对应链路
@@ -27,45 +27,45 @@ async def chat(request: ChatRequest):
 
     if mode == "plan":
         return StreamingResponse(
-            run_plan_stream(request.message),
+            run_plan_stream(request.message, db=db),
             media_type="text/event-stream",
         )
     elif mode == "claude":
         return StreamingResponse(
-            run_claude_stream(request.message),
+            run_claude_stream(request.message, db=db),
             media_type="text/event-stream",
         )
     else:
         # qa 和 write 模式都走问答链路（write 模式由前端调用 /write/preview）
         return StreamingResponse(
-            run_qa_stream(request.message),
+            run_qa_stream(request.message, db=db),
             media_type="text/event-stream",
         )
 
 
 @router.post("/qa")
-async def chat_qa(request: ChatRequest):
+async def chat_qa(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """知识库问答（SSE 流式输出）"""
     return StreamingResponse(
-        run_qa_stream(request.message),
+        run_qa_stream(request.message, db=db),
         media_type="text/event-stream",
     )
 
 
 @router.post("/plan")
-async def chat_plan(request: ChatRequest):
+async def chat_plan(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """生成工作计划（SSE 流式输出）"""
     return StreamingResponse(
-        run_plan_stream(request.message),
+        run_plan_stream(request.message, db=db),
         media_type="text/event-stream",
     )
 
 
 @router.post("/claude")
-async def chat_claude(request: ChatRequest):
+async def chat_claude(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """生成 Claude 指令（SSE 流式输出）"""
     return StreamingResponse(
-        run_claude_stream(request.message),
+        run_claude_stream(request.message, db=db),
         media_type="text/event-stream",
     )
 

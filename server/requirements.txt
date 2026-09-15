@@ -17,6 +17,8 @@ langchain-text-splitters>=0.3.0
 langchain-deepseek>=0.1.0
 faiss-cpu>=1.8.0
 fastembed>=0.3.0  # ONNX 运行时 embedding，不依赖 torch，镜像小构建快
+rank_bm25>=0.2.2  # BM25 关键词检索（Hybrid RAG 稀疏检索通道）
+jieba>=0.42.1     # 中文分词（BM25 中文检索必需）
 
 # 配置与工具
 pydantic>=2.9.0

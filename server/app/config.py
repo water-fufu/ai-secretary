@@ -46,8 +46,17 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2048
 
     # ===== RAG =====
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    # 嵌入模型：paraphrase-multilingual-MiniLM-L12-v2
+    # - 多语言（支持中文），384 维，fastembed 原生支持
+    # - 模型仅 120MB，容器内下载成功率高
+    # - 后续可升级 BGE-M3 / Qwen3-Embedding-0.6B（需 fastembed 新版支持）
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     TOP_K: int = 3
+    # Hybrid 检索配置
+    HYBRID_ENABLED: bool = True          # 是否启用 BM25+向量混合检索
+    HYBRID_BM25_WEIGHT: float = 0.5      # BM25 通道权重（RRF 融合时用）
+    HYBRID_VECTOR_WEIGHT: float = 0.5    # 向量通道权重
+    BM25_TOP_K: int = 10                 # BM25 单通道召回数（融合前）
     # FAISS 索引持久化路径（CloudBase 存储卷挂载点）
     FAISS_INDEX_PATH: str = "/app/data/faiss"
 

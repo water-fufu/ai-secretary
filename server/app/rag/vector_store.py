@@ -42,6 +42,11 @@ class VectorStoreManager:
 
         self._vector_store: Optional[FAISS] = None
 
+    @property
+    def is_initialized(self) -> bool:
+        """向量索引是否已初始化（可用于检索）"""
+        return self._vector_store is not None
+
     def load(self) -> bool:
         """
         从磁盘加载索引

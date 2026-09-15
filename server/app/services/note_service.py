@@ -1,7 +1,10 @@
 """
 笔记业务服务
 处理笔记的增删改查，以及对应的切片和向量索引更新
+同时维护 BM25 关键词索引（Hybrid RAG 稀疏通道）
+索引更新采用后台异步执行，不阻塞 API 响应
 """
+import asyncio
 from typing import List, Optional, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +13,26 @@ from app.models.note import Note
 from app.models.chunk import Chunk
 from app.rag.splitter import split_markdown
 from app.rag.vector_store import get_vector_store
+from app.rag.bm25_retriever import rebuild_bm25_index
+
+
+async def _update_indexes_background(note_id: int):
+    """
+    后台更新索引（向量 + BM25）
+    在独立任务中执行，不阻塞 API 响应
+    注意：需要自己创建 db 会话
+
+    Args:
+        note_id: 笔记 ID（用于增量更新，当前简化为全量重建 BM25）
+    """
+    try:
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            # 重建 BM25 索引（全量，数据量小很快）
+            await rebuild_bm25_index(db)
+        print(f"✅ 后台索引更新完成 (note_id={note_id})")
+    except Exception as e:
+        print(f"⚠ 后台索引更新失败: {e}")
 
 
 async def create_note_with_chunks(
@@ -70,18 +93,31 @@ async def create_note_with_chunks(
     for c in db_chunks:
         await db.refresh(c)
 
-    # 4. 更新向量索引（异步执行，不阻塞响应）
-    # TODO: 可以用后台任务执行，这里先同步
+    # 4. 后台更新索引（向量 + BM25），不阻塞响应
+    # 向量索引更新可能因模型下载而耗时，放后台执行
+    asyncio.create_task(_update_vector_index_background(chunks, db_chunks))
+    asyncio.create_task(_update_indexes_background(note.id))
+
+    return note, db_chunks
+
+
+async def _update_vector_index_background(chunks: list, db_chunks: list):
+    """
+    后台更新向量索引（FAISS）
+    模型下载可能耗时，放后台执行不阻塞 API
+
+    Args:
+        chunks: LangChain Document 列表（带 metadata）
+        db_chunks: 数据库切片对象列表
+    """
     try:
         vs = get_vector_store()
-        # 为每个切片添加 chunk_id 到 metadata
         for chunk, db_chunk in zip(chunks, db_chunks):
             chunk.metadata["chunk_id"] = db_chunk.id
         vs.add_documents(chunks)
+        print("✅ 向量索引后台更新完成")
     except Exception as e:
-        print(f"⚠ 向量索引更新失败: {e}")
-
-    return note, db_chunks
+        print(f"⚠ 向量索引后台更新失败: {e}")
 
 
 async def update_note_with_chunks(
@@ -137,17 +173,27 @@ async def update_note_with_chunks(
             await db.flush()
             chunk.metadata["chunk_id"] = db_chunk.id
 
-        # 更新向量索引（简化：标记删除旧的，添加新的）
-        try:
-            vs = get_vector_store()
-            vs.remove_by_chunk_ids(old_chunk_ids)
-            vs.add_documents(new_chunks)
-        except Exception as e:
-            print(f"⚠ 向量索引更新失败: {e}")
+        # 后台更新向量索引（简化：标记删除旧的，添加新的）
+        asyncio.create_task(_update_vector_index_on_update_background(old_chunk_ids, new_chunks))
+        # 后台重建 BM25 索引
+        asyncio.create_task(_update_indexes_background(note_id))
 
     await db.commit()
     await db.refresh(note)
     return note
+
+
+async def _update_vector_index_on_update_background(old_chunk_ids: list, new_chunks: list):
+    """
+    后台更新向量索引（更新笔记时）
+    """
+    try:
+        vs = get_vector_store()
+        vs.remove_by_chunk_ids(old_chunk_ids)
+        vs.add_documents(new_chunks)
+        print("✅ 向量索引后台更新完成（更新笔记）")
+    except Exception as e:
+        print(f"⚠ 向量索引后台更新失败: {e}")
 
 
 async def delete_note_with_chunks(db: AsyncSession, note_id: int) -> bool:
@@ -175,14 +221,23 @@ async def delete_note_with_chunks(db: AsyncSession, note_id: int) -> bool:
     await db.delete(note)
     await db.commit()
 
-    # 更新向量索引
+    # 后台更新索引
+    asyncio.create_task(_update_vector_index_on_delete_background(chunk_ids))
+    asyncio.create_task(_update_indexes_background(note_id))
+
+    return True
+
+
+async def _update_vector_index_on_delete_background(chunk_ids: list):
+    """
+    后台更新向量索引（删除笔记时）
+    """
     try:
         vs = get_vector_store()
         vs.remove_by_chunk_ids(chunk_ids)
+        print("✅ 向量索引后台更新完成（删除笔记）")
     except Exception as e:
-        print(f"⚠ 向量索引更新失败: {e}")
-
-    return True
+        print(f"⚠ 向量索引后台更新失败: {e}")
 
 
 async def rebuild_index_from_db(db: AsyncSession) -> dict:
@@ -218,14 +273,30 @@ async def rebuild_index_from_db(db: AsyncSession) -> dict:
         )
         documents.append(doc)
 
-    # 重建索引
-    vs = get_vector_store()
-    vs.rebuild(documents)
+    # 后台重建向量索引（模型下载可能耗时，不阻塞响应）
+    asyncio.create_task(_rebuild_vector_index_background(documents))
+
+    # 同步重建 BM25 关键词索引（不依赖模型，很快）
+    bm25_count = await rebuild_bm25_index(db)
 
     return {
         "chunk_count": len(documents),
         "note_count": (await db.execute(select(func.count(Note.id)))).scalar() or 0,
+        "bm25_chunk_count": bm25_count,
     }
+
+
+async def _rebuild_vector_index_background(documents: list):
+    """
+    后台重建向量索引（FAISS）
+    模型下载可能耗时，放后台执行
+    """
+    try:
+        vs = get_vector_store()
+        vs.rebuild(documents)
+        print("✅ 向量索引后台重建完成")
+    except Exception as e:
+        print(f"⚠ 向量索引后台重建失败: {e}")
 
 
 async def get_vault_stats(db: AsyncSession) -> dict:

@@ -1,8 +1,11 @@
 """
 向量化模块
-使用 fastembed（ONNX 运行时）加载 all-MiniLM-L6-v2 模型
-不依赖 torch，镜像体积小，构建快
-单例模式，避免重复加载模型
+使用 fastembed（ONNX 运行时）加载 paraphrase-multilingual-MiniLM-L12-v2 模型
+- 多语言嵌入模型（支持中英等 50+ 语言），384 维
+- 模型仅 120MB，容器内下载成功率高
+- 不依赖 torch，镜像体积小，构建快
+- 单例模式，避免重复加载模型
+- 后续可升级 BGE-M3 / Qwen3-Embedding-0.6B（需 fastembed 新版支持）
 """
 from typing import List, Optional
 from fastembed import TextEmbedding

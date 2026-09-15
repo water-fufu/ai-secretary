@@ -31,15 +31,18 @@ RUN pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# 设置 HuggingFace 国内镜像源（容器内访问 huggingface.co 不稳定）
+ENV HF_ENDPOINT=https://hf-mirror.com
+
 # 拷贝应用代码
 COPY . .
 
 # 创建数据目录（SQLite + FAISS 索引）
 RUN mkdir -p /app/data/faiss
 
-# 预下载 fastembed 嵌入模型（构建时下载，避免运行时从 HuggingFace 拉取）
-# 模型缓存到 ~/.cache/fastembed，打包进镜像
-RUN python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='all-MiniLM-L6-v2').embed(['test']))" && echo "Embedding model downloaded"
+# 预下载嵌入模型到镜像中（避免容器运行时网络下载失败）
+# fastembed 模型缓存路径: /root/.cache/fastembed/
+RUN python -c "from fastembed import TextEmbedding; m = TextEmbedding(model_name='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'); list(m.embed(['preload'])); print('Model pre-downloaded OK')"
 
 # 暴露端口（必须与 CloudBase 服务配置一致：8080）
 EXPOSE 8080

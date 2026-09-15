@@ -41,23 +41,26 @@ def sse_event(event: str, data: Dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def run_qa_stream(question: str, folder_filter: str = None) -> AsyncGenerator[str, None]:
+async def run_qa_stream(question: str, folder_filter: str = None, db=None) -> AsyncGenerator[str, None]:
     """
     知识库问答链路（SSE 流式输出）
-    流程：检索 -> 冲突检测 -> 流式生成回答
+    流程：检索（Hybrid: BM25+向量） -> 冲突检测 -> 流式生成回答
 
     Args:
         question: 用户问题
         folder_filter: 文件夹过滤
+        db: 数据库会话（用于 BM25 索引构建）
 
     Yields:
         SSE 事件字符串
     """
     start_time = time.time()
 
-    # 1. 检索
+    # 1. Hybrid 检索（BM25 + 向量，RRF 融合；向量不可用时自动降级 BM25）
     yield sse_event("status", {"stage": "retrieving", "message": "正在检索知识库..."})
-    docs = retrieve_chunks(question, top_k=settings.TOP_K, folder_filter=folder_filter)
+    docs, retrieve_mode = await retrieve_chunks(
+        question, top_k=settings.TOP_K, folder_filter=folder_filter, db=db
+    )
 
     if not docs:
         yield sse_event("status", {"stage": "no_result", "message": "天书库中暂无相关资料"})
@@ -137,12 +140,13 @@ async def run_qa_stream(question: str, folder_filter: str = None) -> AsyncGenera
     })
 
 
-async def run_plan_stream(task: str) -> AsyncGenerator[str, None]:
+async def run_plan_stream(task: str, db=None) -> AsyncGenerator[str, None]:
     """
     工作计划生成链路（SSE 流式输出）
 
     Args:
         task: 任务描述
+        db: 数据库会话（用于 BM25 索引构建）
 
     Yields:
         SSE 事件字符串
@@ -150,7 +154,7 @@ async def run_plan_stream(task: str) -> AsyncGenerator[str, None]:
     start_time = time.time()
 
     yield sse_event("status", {"stage": "retrieving", "message": "正在检索相关资料..."})
-    docs = retrieve_chunks(task, top_k=settings.TOP_K)
+    docs, retrieve_mode = await retrieve_chunks(task, top_k=settings.TOP_K, db=db)
     context = format_retrieved_context(docs)
     sources = get_sources_from_docs(docs)
 
@@ -183,12 +187,13 @@ async def run_plan_stream(task: str) -> AsyncGenerator[str, None]:
     })
 
 
-async def run_claude_stream(plan_or_task: str) -> AsyncGenerator[str, None]:
+async def run_claude_stream(plan_or_task: str, db=None) -> AsyncGenerator[str, None]:
     """
     Claude 指令生成链路（SSE 流式输出）
 
     Args:
         plan_or_task: 工作计划或任务描述
+        db: 数据库会话（用于 BM25 索引构建）
 
     Yields:
         SSE 事件字符串
@@ -199,7 +204,7 @@ async def run_claude_stream(plan_or_task: str) -> AsyncGenerator[str, None]:
     if len(plan_or_task) < 100 and not plan_or_task.startswith("###"):
         yield sse_event("status", {"stage": "planning", "message": "正在生成工作计划..."})
         # 同步获取计划（非流式，因为需要完整计划才能生成指令）
-        docs = retrieve_chunks(plan_or_task, top_k=settings.TOP_K)
+        docs, retrieve_mode = await retrieve_chunks(plan_or_task, top_k=settings.TOP_K, db=db)
         context = format_retrieved_context(docs)
         plan_prompt = ChatPromptTemplate.from_messages([
             ("system", PLAN_SYSTEM_PROMPT),

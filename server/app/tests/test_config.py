@@ -15,7 +15,16 @@ class TestSettings:
         assert settings.APP_VERSION == "2.0.0"
         assert settings.LLM_MODEL == "deepseek-chat"
         assert settings.TOP_K == 3
-        assert settings.EMBEDDING_MODEL == "all-MiniLM-L6-v2"
+        # paraphrase-multilingual-MiniLM-L12-v2 多语言嵌入模型（支持中文，384 维，120MB）
+        assert settings.EMBEDDING_MODEL == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+    def test_hybrid_rag_config(self):
+        """测试 Hybrid RAG（BM25+向量）配置"""
+        settings = Settings()
+        assert settings.HYBRID_ENABLED is True
+        assert 0 < settings.HYBRID_BM25_WEIGHT <= 1
+        assert 0 < settings.HYBRID_VECTOR_WEIGHT <= 1
+        assert settings.BM25_TOP_K > 0
 
     def test_cors_origins_type(self):
         """测试 CORS 配置类型"""
